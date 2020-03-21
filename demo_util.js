@@ -127,7 +127,7 @@ export function drawKeypoints(keypoints, minConfidence, ctx, scale = 1) {
 /**
  * Makes a sound if wrists are raised above shoulder line
  */
-export function keepYourHandsOffYourFace(keypoints, minConfidence) {
+export function keepYourHandsOffYourFace(keypoints, minConfidence, showShoulderline, ctx) {
   const lShoulderVisible = keypoints[5].score > minConfidence;
   const lShoulderY = keypoints[5].position.y;
   const rShoulderVisible = keypoints[6].score > minConfidence;
@@ -135,9 +135,13 @@ export function keepYourHandsOffYourFace(keypoints, minConfidence) {
 
   // estimate shoulder hight
   if (lShoulderVisible && !rShoulderVisible) return;
-  const shoulderY = lShoulderVisible
-    ? (rShoulderVisible ? lShoulderY + rShoulderY / 2 : lShoulderY)
-    : rShoulderY;
+  const shoulderY = (lShoulderVisible
+    ? (rShoulderVisible ? Math.max(lShoulderY, rShoulderY) : lShoulderY)
+    : rShoulderY) + 40; // fixed offset to account for fingers
+
+  if (showShoulderline) {
+    drawSegment([shoulderY, 0], [shoulderY, (ctx.context || {}).width || 600], 'red', 1, ctx);
+  }
 
   // left Hand in your face?
   const lWristVisible = keypoints[9].score > minConfidence;
@@ -152,7 +156,7 @@ export function keepYourHandsOffYourFace(keypoints, minConfidence) {
   if (rWristVisible) {
     if (rWristY <= shoulderY) beep();
   }
-  console.log('ShoulderY:', shoulderY, 'lWristY:', lWristY, 'rWristY', rWristY);
+  // console.log('ShoulderY:', shoulderY, 'lWristY:', lWristY, 'rWristY', rWristY);
 }
 
 const beep = (function () {

@@ -444,7 +444,7 @@ function detectPoseInRealTime(video, net) {
         if (guiState.output.showBoundingBox) {
           drawBoundingBox(keypoints, ctx);
         }
-        keepYourHandsOffYourFace(keypoints, minPartConfidence);
+        keepYourHandsOffYourFace(keypoints, minPartConfidence, guiState.output.showSkeleton, ctx);
       }
     });
 
