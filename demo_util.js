@@ -124,6 +124,68 @@ export function drawKeypoints(keypoints, minConfidence, ctx, scale = 1) {
   }
 }
 
+/** */
+export function keepYourDistance(poses, minPoseConfidence, minPartConfidence) {
+  const avgShoulderWidth = 0.457; // meter - Source: Kleine Ergonomische Datensammlung, 16. Auflage, Bundesanstalt für Arbeitsschutz und Arbeitsmedizin
+  const minDist = 1.5; // meter - minimum distance between two people according to corona regulations
+
+  // For each pose (i.e. person) detected in an image, compute the center of their shoulder
+  const shoulderCenters = poses.map(({ score, keypoints }) => {
+    if (score >= minPoseConfidence) {
+      const lShoulderVisible = keypoints[5].score > minPartConfidence;
+      const rShoulderVisible = keypoints[6].score > minPartConfidence;
+      if (!lShoulderVisible && !rShoulderVisible)
+        return null;
+
+      const lShoulder = keypoints[5].position;
+      const rShoulder = keypoints[6].position;
+
+      const shoulderCenter = lShoulderVisible
+        ? (
+          rShoulderVisible
+            ? { x: (lShoulder.x + rShoulder.x) / 2, y: (lShoulder.y + rShoulder.y) / 2, d2: d2(lShoulder, rShoulder) }
+            : lShoulder
+        ) : rShoulder;
+
+      return shoulderCenter;
+    }
+  }).filter((x) => !!x);
+
+  // check pairwise if minimum distance is maintained
+  shoulderCenters.forEach((c1, i1) => {
+    const l = shoulderCenters.length;
+    for (let i2 = i1 + 1; i2 < l; i2++) {
+      const c2 = shoulderCenters[i2];
+      if (!c1.d2 && !c2.d2) continue; // not possible to establish scale of image since neither shoulder is fully visible
+
+      const shoulderWidth = !!c1.d2 // avg in pixel
+        ? (
+          !!c2.d2
+            ? (Math.sqrt(c1.d2) + Math.sqrt(c2.d2)) / 2
+            : Math.sqrt(c1.d2)
+        ) : Math.sqrt(c2.d2);
+
+      const pixelPerMeter = shoulderWidth / avgShoulderWidth; // avg number of pixels per Meter physical distance for those two entities (assuming shoulders are perpendicular to camera)
+
+      const dPixel = Math.sqrt(d2(c1, c2)); // distance between shoulder centers in pixel
+      const dMeter = dPixel/pixelPerMeter; // and approximately in meters
+
+      if (dMeter < minDist) {
+        console.log('Too close to each other!!!');
+        beep();
+      }
+    }
+  });
+}
+
+function d2(p1, p2) {
+  return square(p1.x - p2.x) + square(p1.y - p2.y);
+}
+
+function square(x) {
+  return x * x;
+}
+
 /**
  * Makes a sound if wrists are raised above shoulder line
  */
@@ -134,7 +196,7 @@ export function keepYourHandsOffYourFace(keypoints, minConfidence, showShoulderl
   const rShoulderY = keypoints[6].position.y;
 
   // estimate shoulder hight
-  if (lShoulderVisible && !rShoulderVisible) return;
+  if (!lShoulderVisible && !rShoulderVisible) return;
   const shoulderY = (lShoulderVisible
     ? (rShoulderVisible ? Math.max(lShoulderY, rShoulderY) : lShoulderY)
     : rShoulderY) + 40; // fixed offset to account for fingers
@@ -160,7 +222,7 @@ export function keepYourHandsOffYourFace(keypoints, minConfidence, showShoulderl
 }
 
 const beep = (function () {
-  console.log('Keep your hands off your face!!!!');
+  // console.log('Keep your hands off your face!!!!');
   let ctxClass = window.audioContext || window.AudioContext || window.AudioContext || window.webkitAudioContext;
   let ctx = new ctxClass();
   return function () {
